@@ -1,0 +1,12 @@
+.git
+.trae
+bin/
+data/
+*.db
+*.db-wal
+*.db-shm
+*.md
+*.pdf
+*.docx
+deployments/data/
+deployments/plugins/

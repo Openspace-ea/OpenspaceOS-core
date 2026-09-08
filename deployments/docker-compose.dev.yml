@@ -1,0 +1,37 @@
+# Openspace OS Core docker-compose —— 单机回退/开发演示模式
+# storage.type=sqlite + bus.type=local，无需任何外部依赖即可完整启动。
+# 适用于本地开发、演示或离线环境（对应 T6.7 回退验证）。
+
+services:
+  openspace-os-core:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    image: openspace-os-core:latest
+    container_name: openspace-os-core-dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+      - "7000:7000"
+    volumes:
+      - ../data:/app/data
+      - ../plugins:/app/plugins
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - TZ=Asia/Shanghai
+      - OPENSPACE_LOG_LEVEL=info
+      # 明确声明单机回退模式（默认即 sqlite + local，此处显式强调）
+      - OPENSPACE_DATA_TYPE=sqlite
+      - OPENSPACE_BUS_TYPE=local
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"

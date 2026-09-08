@@ -1,0 +1,37 @@
+# Openspace OS Core 容器部署用配置文件
+# 路径已调整为容器内绝对路径，配合 docker-compose 卷挂载使用
+# 生产模式（docker-compose.yml）通过 OPENSPACE_* 环境变量覆盖，使 storage.type=postgres、bus.type=nats；
+# 本文件保持 sqlite + local 作为单机回退/开发默认。
+
+server:
+  http_port: 8080
+  grpc_port: 9090
+  telemetry_port: 7000
+
+data:
+  type: sqlite
+  sqlite_path: /app/data/openspace-os.db
+  postgres_dsn: ""         # 生产由 OPENSPACE_DATA_POSTGRES_DSN 覆盖
+
+bus:
+  type: local              # 生产由 OPENSPACE_BUS_TYPE=nats 覆盖
+  url: nats://nats:4222
+  stream_name: events
+  max_stream_age: 168h
+
+plugin:
+  directory: /app/plugins
+
+log:
+  level: info
+  format: json
+
+otel:
+  enabled: false
+  endpoint: ""
+  service_name: openspace-os-core
+
+auth:
+  enabled: false           # 生产由 OPENSPACE_AUTH_ENABLED=true 覆盖
+  secret_key: "change-me-in-production"
+  token_duration: 24

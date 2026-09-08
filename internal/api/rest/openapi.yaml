@@ -1,0 +1,1910 @@
+openapi: 3.0.3
+info:
+  title: Openspace OS Core REST API
+  version: "1.0.0"
+  description: |
+    Openspace OS Core 是面向航天运营的开放平台核心服务，提供节点管理、关系图、事件总线、
+    指令流水线、遥测流水线、插件管理等能力。
+
+    本文档描述 Openspace OS Core 对外暴露的 REST API（前缀 `/api/v1`）。
+    除 `/api/v1/auth/login`、`/api/v1/health`、`/api/v1/docs`、`/api/v1/openapi.yaml`、
+    `/healthz`、`/metrics` 外，其余端点在启用认证时需要携带 `Authorization: Bearer <token>` 头部。
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  contact:
+    name: Openspace OS
+    url: https://github.com/jeffreytanhao-eng/openspace-os-core
+
+servers:
+  - url: http://localhost:8080
+    description: 本地开发环境
+  - url: http://localhost:9090
+    description: 本地开发环境（备用端口）
+
+tags:
+  - name: Auth
+    description: 认证与用户身份
+  - name: Users
+    description: 用户管理（仅 admin）
+  - name: Nodes
+    description: 节点管理
+  - name: Relationships
+    description: 关系管理与图遍历
+  - name: Events
+    description: 事件订阅、回放与 Schema
+  - name: Commands
+    description: 指令流水线
+  - name: Telemetry
+    description: 遥测流水线
+  - name: Plugins
+    description: 插件管理
+  - name: Health
+    description: 健康检查与监控
+
+security:
+  - BearerAuth: []
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: 登录
+      description: 使用用户名密码换取 JWT token。此端点无需认证。
+      security: []
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: admin
+              password: admin123
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: 用户名或密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 认证服务未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新 token
+      description: 使用当前有效的 token 换取新的 token。需携带 Authorization 头。
+      operationId: refreshToken
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: token 无效或缺失
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 认证服务未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: 当前用户信息
+      description: 返回当前登录用户的完整信息。
+      operationId: getMe
+      responses:
+        '200':
+          description: 当前用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: 列出用户
+      description: 返回所有用户列表。需要 user.manage 权限（admin）。
+      operationId: listUsers
+      responses:
+        '200':
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '403':
+          description: 无权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 认证服务未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      tags: [Users]
+      summary: 创建用户
+      description: 创建新用户。需要 user.manage 权限（admin）。
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+            example:
+              username: operator1
+              password: secret
+              roles: [operator]
+              communityId: comm-1
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: 无权限
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/users/{userId}:
+    delete:
+      tags: [Users]
+      summary: 删除用户
+      description: 删除指定用户。需要 user.manage 权限（admin）。
+      operationId: deleteUser
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: 删除成功
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/nodes:
+    post:
+      tags: [Nodes]
+      summary: 创建 Node
+      description: 注册一个新的节点。需要 node.create 权限。
+      operationId: createNode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNodeRequest'
+            example:
+              nodeId: sat-1
+              nodeType: Satellite
+              name: TestSat
+              status: active
+              ownerCommunityId: comm-1
+              properties: {}
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Nodes]
+      summary: 列表查询
+      description: |
+        按条件分页查询节点列表。需要 node.read 权限。
+
+        支持的查询参数：
+        * `nodeType` - 按节点类型过滤
+        * `communityId` - 按所属社区过滤
+        * `status` - 按状态过滤
+        * `limit` - 返回条数上限
+        * `offset` - 偏移量
+      operationId: listNodes
+      parameters:
+        - name: nodeType
+          in: query
+          description: 节点类型
+          required: false
+          schema:
+            $ref: '#/components/schemas/NodeType'
+        - name: communityId
+          in: query
+          description: 所属社区 ID
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          description: 节点状态
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          description: 返回条数上限
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+        - name: offset
+          in: query
+          description: 偏移量
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+      responses:
+        '200':
+          description: 节点列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Node'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/nodes/{nodeId}:
+    get:
+      tags: [Nodes]
+      summary: 查询 Node
+      description: 查询单个节点的详细信息。需要 node.read 权限。
+      operationId: getNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      responses:
+        '200':
+          description: 节点详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '404':
+          description: 节点不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    put:
+      tags: [Nodes]
+      summary: 更新 Node
+      description: |
+        更新节点字段。需要 node.update 权限。
+
+        请求体为键值对 map，仅包含需要更新的字段。
+      operationId: updateNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNodeRequest'
+            example:
+              status: standby
+              name: 更新后的卫星
+      responses:
+        '200':
+          description: 更新后的节点
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Node'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: 节点不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Nodes]
+      summary: 删除 Node
+      description: 删除指定节点。需要 node.delete 权限。
+      operationId: deleteNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          description: 节点不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/nodes/{nodeId}/relationships:
+    post:
+      tags: [Relationships]
+      summary: 建立关系
+      description: 在指定节点（起始节点）与目标节点之间建立关系。需要 relationship.create 权限。
+      operationId: createRelationship
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRelationshipRequest'
+            example:
+              toNodeId: comm-1
+              relType: belongsTo
+              properties: {}
+      responses:
+        '201':
+          description: 关系创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Relationship'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/relationships/{relId}:
+    delete:
+      tags: [Relationships]
+      summary: 删除关系
+      description: 删除指定关系。需要 relationship.delete 权限。
+      operationId: deleteRelationship
+      parameters:
+        - $ref: '#/components/parameters/RelId'
+      responses:
+        '204':
+          description: 删除成功
+        '404':
+          description: 关系不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/nodes/{nodeId}/graph:
+    get:
+      tags: [Relationships]
+      summary: 图遍历
+      description: |
+        从指定节点出发进行关系图遍历。需要 graph.query 权限。
+
+        支持的查询参数：
+        * `direction` - 遍历方向：out（默认）、in、both
+        * `relType` - 关系类型过滤
+        * `depth` - 最大遍历深度，默认 1
+      operationId: traverseGraph
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+        - name: direction
+          in: query
+          description: 遍历方向
+          required: false
+          schema:
+            type: string
+            enum: [out, in, both]
+            default: out
+        - name: relType
+          in: query
+          description: 关系类型过滤
+          required: false
+          schema:
+            $ref: '#/components/schemas/RelationshipType'
+        - name: depth
+          in: query
+          description: 最大遍历深度
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        '200':
+          description: 关系列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Relationship'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/events/subscribe:
+    get:
+      tags: [Events]
+      summary: SSE 事件订阅
+      description: |
+        以 Server-Sent Events 方式订阅事件总线。需要 event.subscribe 权限。
+
+        连接建立后会先发送一条 `: connected` 注释行，随后每当有事件发布时推送 `data: <event json>` 行。
+
+        支持的查询参数：
+        * `types` - 事件类型过滤，逗号分隔，例如 `NodeRegistered,StateUpdated`
+      operationId: subscribeEvents
+      parameters:
+        - name: types
+          in: query
+          description: 事件类型过滤（逗号分隔）
+          required: false
+          schema:
+            type: string
+          example: NodeRegistered,StateUpdated
+      responses:
+        '200':
+          description: SSE 流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: "SSE 事件流，每个事件以 `data: <json>` 形式输出"
+        '500':
+          description: 服务器不支持 SSE
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/events/replay:
+    post:
+      tags: [Events]
+      summary: 事件回放
+      description: 按条件回放历史事件。需要 event.replay 权限。
+      operationId: replayEvents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplayRequest'
+            example:
+              eventTypes: [NodeRegistered]
+              sourceNodeId: sat-1
+              startTime: "2026-07-01T00:00:00Z"
+              endTime: "2026-07-02T00:00:00Z"
+              limit: 100
+      responses:
+        '200':
+          description: 回放的事件列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Event'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: 服务器错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/schemas:
+    get:
+      tags: [Events]
+      summary: 列出事件 Schema
+      description: 返回所有已注册的事件 Schema 列表。此端点无需认证。
+      security: []
+      operationId: listSchemas
+      responses:
+        '200':
+          description: Schema 列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Schema'
+
+  /api/v1/commands:
+    post:
+      tags: [Commands]
+      summary: 发送指令
+      description: |
+        发送遥控指令到指定卫星。需要 command.send 权限。
+
+        指令将进入流水线排队，由当前激活的指令适配器发送。
+      operationId: sendCommand
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendCommandRequest'
+            example:
+              satelliteId: sat-1
+              commandType: attitude
+              priority: 5
+              parameters: {}
+      responses:
+        '202':
+          description: 指令已入队
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendCommandResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 指令流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Commands]
+      summary: 列出指令
+      description: 列出所有指令，支持按状态过滤。需要 command.send 权限。
+      operationId: listCommands
+      parameters:
+        - name: status
+          in: query
+          description: 按状态过滤
+          required: false
+          schema:
+            type: string
+            enum: [queued, sent, acked, failed, timeout, cancelled]
+      responses:
+        '200':
+          description: 指令列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommandStatus'
+        '503':
+          description: 指令流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/commands/{commandId}:
+    get:
+      tags: [Commands]
+      summary: 查询指令状态
+      description: 查询指定指令的当前状态。需要 command.send 权限。
+      operationId: getCommandStatus
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: 指令状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandStatus'
+        '404':
+          description: 指令不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 指令流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      tags: [Commands]
+      summary: 取消指令
+      description: 取消尚未发送或正在排队的指令。需要 command.send 权限。
+      operationId: cancelCommand
+      parameters:
+        - $ref: '#/components/parameters/CommandId'
+      responses:
+        '200':
+          description: 取消成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CancelCommandResponse'
+        '400':
+          description: 无法取消（例如已发送）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 指令流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/command-adapters:
+    get:
+      tags: [Commands]
+      summary: 列出适配器
+      description: 列出可用的指令适配器及当前激活的适配器。需要 plugin.manage 权限。
+      operationId: listCommandAdapters
+      responses:
+        '200':
+          description: 适配器列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAdaptersResponse'
+        '503':
+          description: 指令流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/command-adapter:
+    post:
+      tags: [Commands]
+      summary: 设置适配器
+      description: 设置当前激活的指令适配器。需要 plugin.manage 权限。
+      operationId: setCommandAdapter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetNameRequest'
+            example:
+              name: mock
+      responses:
+        '200':
+          description: 设置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetNameResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 指令流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/telemetry/parsers:
+    get:
+      tags: [Telemetry]
+      summary: 列出解析器
+      description: 列出可用的遥测解析器及当前激活的解析器。需要 plugin.manage 权限。
+      operationId: listTelemetryParsers
+      responses:
+        '200':
+          description: 解析器列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListParsersResponse'
+
+  /api/v1/telemetry/parser:
+    post:
+      tags: [Telemetry]
+      summary: 设置解析器
+      description: 设置当前激活的遥测解析器。需要 plugin.manage 权限。
+      operationId: setTelemetryParser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetNameRequest'
+            example:
+              name: json
+      responses:
+        '200':
+          description: 设置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetNameResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 遥测流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/telemetry/send:
+    post:
+      tags: [Telemetry]
+      summary: 手动发送遥测
+      description: |
+        手动向遥测流水线发送一段原始遥测数据，通常用于测试。
+
+        需要插件管理权限。需要 plugin.manage 权限。
+      operationId: sendTelemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendTelemetryRequest'
+            example:
+              data: '{"satelliteId":"sat-1","timestamp":"2026-07-01T00:00:00Z","parameters":{"temp":45.2},"quality":"good"}'
+      responses:
+        '202':
+          description: 已接受处理
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendTelemetryResponse'
+        '400':
+          description: 请求参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 遥测流水线未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/plugins:
+    get:
+      tags: [Plugins]
+      summary: 列出插件
+      description: 列出所有已注册的插件实例。需要 plugin.manage 权限。
+      operationId: listPlugins
+      responses:
+        '200':
+          description: 插件列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PluginInstance'
+
+  /api/v1/plugins/{name}/unload:
+    post:
+      tags: [Plugins]
+      summary: 卸载插件
+      description: 卸载指定名称的插件。需要 plugin.manage 权限。
+      operationId: unloadPlugin
+      parameters:
+        - name: name
+          in: path
+          description: 插件名称
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 卸载成功
+        '404':
+          description: 插件不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: 插件管理未启用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/health:
+    get:
+      tags: [Health]
+      summary: 健康检查
+      description: 返回服务状态、版本信息与运行时间。此端点无需认证。
+      security: []
+      operationId: health
+      responses:
+        '200':
+          description: 服务状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /healthz:
+    get:
+      tags: [Health]
+      summary: 健康检查（旧端点）
+      description: 与 /api/v1/health 等价，保留以兼容旧客户端。此端点无需认证。
+      security: []
+      operationId: healthz
+      responses:
+        '200':
+          description: 服务状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Prometheus metrics
+      description: 以 Prometheus 文本格式暴露核心运行指标。此端点无需认证。
+      security: []
+      operationId: metrics
+      responses:
+        '200':
+          description: Prometheus 格式指标
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/docs:
+    get:
+      tags: [Health]
+      summary: Swagger UI
+      description: 提供 Swagger UI 页面（基于 CDN 加载 swagger-ui-dist）。此端点无需认证。
+      security: []
+      operationId: swaggerUI
+      responses:
+        '200':
+          description: Swagger UI HTML 页面
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/v1/openapi.yaml:
+    get:
+      tags: [Health]
+      summary: OpenAPI 规范文件
+      description: 返回 OpenAPI 3.0 YAML 规范文件原始内容。此端点无需认证。
+      security: []
+      operationId: openapiSpec
+      responses:
+        '200':
+          description: OpenAPI YAML 文件
+          content:
+            application/yaml:
+              schema:
+                type: string
+
+  # ===== 机器接入方认证（T2） =====
+  /api/v1/auth/token:
+    post:
+      tags: [Auth]
+      summary: API Key 换取 JWT
+      description: |
+        机器接入方（Client）用其 API Key 换取短期 JWT。
+        请求体可直接携带 `apiKey`（aos_ 前缀），或通过 `Authorization: Bearer <apiKey>` 头传递。
+        此后使用返回的 JWT 作为 `Authorization: Bearer <token>` 调用其余端点。此端点无需权限。
+      security: []
+      operationId: exchangeToken
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenExchangeRequest'
+      responses:
+        '200':
+          description: 换取成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: API Key 无效或被吊销
+
+  /api/v1/clients:
+    get:
+      tags: [Auth]
+      summary: 列出所有机器接入方
+      description: 需 admin 权限（user.manage）。
+      operationId: listClients
+      responses:
+        '200':
+          description: 机器接入方列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Client'
+    post:
+      tags: [Auth]
+      summary: 创建机器接入方并生成 API Key
+      description: 需 admin 权限（user.manage）。仅创建响应返回明文 API Key，此后不可再获取。
+      operationId: createClient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientRequest'
+      responses:
+        '201':
+          description: 创建成功，含明文 API Key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          description: 参数校验失败
+
+  /api/v1/clients/{clientId}:
+    get:
+      tags: [Auth]
+      summary: 查询单个机器接入方
+      description: 需 admin 权限（user.manage）。
+      operationId: getClient
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 机器接入方详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '404':
+          description: 未找到
+    delete:
+      tags: [Auth]
+      summary: 吊销机器接入方
+      description: 吊销后其 API Key 与 JWT 均失效。需 admin 权限（user.manage）。
+      operationId: revokeClient
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: 吊销成功
+        '404':
+          description: 未找到
+
+  # ===== 遥测上报（T5） =====
+  /api/v1/telemetry/ingest:
+    post:
+      tags: [Telemetry]
+      summary: 批量上报遥测数据
+      description: |
+        带鉴权遥测上报入口：任何已认证的人/机主体可上报。
+        批量接收遥测帧，逐帧标准化并发布为 `TelemetryReceived` 事件入事件总线。
+        缺失时间戳的帧会使用当前时间补齐；非法帧被丢弃并在 `accepted` 中扣除，不中断整体处理。
+        同时计量上报的帧数与字节数（usage，T5.6）。
+      operationId: ingestTelemetry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngestTelemetryRequest'
+      responses:
+        '202':
+          description: 已接受（部分或全部帧成功入总线）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestTelemetryResponse'
+        '400':
+          description: frames 为空或请求体非法
+        '503':
+          description: 遥测流水线未启用
+
+  # ===== 用量统计（T3，计费预留） =====
+  /api/v1/billing/usage:
+    get:
+      tags: [Auth]
+      summary: 查询用量统计
+      description: |
+        按租户/客户端/时间范围取用量汇总（计费预留，不涉及费率/账单）。
+        需 admin 权限（user.manage）。
+      operationId: listUsage
+      parameters:
+        - name: community_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 按社区/租户过滤
+        - name: client_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 按客户端过滤
+        - name: start_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: 起始时间（RFC3339），默认最近 24 小时
+        - name: end_time
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 用量聚合结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  aggregates:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UsageAggregate'
+                  count:
+                    type: integer
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "使用 JWT Bearer token 认证。先调用 /api/v1/auth/login 获取 token，再以 `Authorization: Bearer <token>` 形式携带。"
+
+  parameters:
+    NodeId:
+      name: nodeId
+      in: path
+      description: 节点 ID
+      required: true
+      schema:
+        type: string
+      example: sat-1
+    RelId:
+      name: relId
+      in: path
+      description: 关系 ID
+      required: true
+      schema:
+        type: string
+      example: rel-1
+    UserId:
+      name: userId
+      in: path
+      description: 用户 ID
+      required: true
+      schema:
+        type: string
+    CommandId:
+      name: commandId
+      in: path
+      description: 指令 ID
+      required: true
+      schema:
+        type: string
+      example: 00000000-0000-0000-0000-000000000001
+
+  schemas:
+    Node:
+      type: object
+      description: Openspace OS 通用节点
+      properties:
+        nodeId:
+          type: string
+          description: 全局唯一标识
+          example: sat-1
+        nodeType:
+          $ref: '#/components/schemas/NodeType'
+        name:
+          type: string
+          description: 名称
+          example: TestSat
+        status:
+          type: string
+          description: 当前状态
+          example: active
+        ownerCommunityId:
+          type: string
+          description: 所属社区 ID
+          example: comm-1
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2026-07-01T00:00:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新时间
+          example: "2026-07-01T00:00:00Z"
+        shardKey:
+          type: string
+          description: 分片键（预留）
+        federationId:
+          type: string
+          description: 联邦标识（预留）
+        properties:
+          type: object
+          description: 类型特有属性的扩展字段
+          additionalProperties: true
+      required: [nodeId, nodeType, name, status, ownerCommunityId, createdAt, updatedAt]
+
+    NodeType:
+      type: string
+      description: 节点类型枚举
+      enum:
+        - Satellite
+        - GroundStation
+        - Task
+        - Community
+        - Mission
+        - Antenna
+        - Payload
+        - Telemetry
+        - Command
+        - Alarm
+      example: Satellite
+
+    CreateNodeRequest:
+      type: object
+      description: 创建节点请求体
+      properties:
+        nodeId:
+          type: string
+          example: sat-1
+        nodeType:
+          $ref: '#/components/schemas/NodeType'
+        name:
+          type: string
+          example: TestSat
+        status:
+          type: string
+          example: active
+        ownerCommunityId:
+          type: string
+          example: comm-1
+        shardKey:
+          type: string
+        federationId:
+          type: string
+        properties:
+          type: object
+          additionalProperties: true
+      required: [nodeId, nodeType, name, status, ownerCommunityId]
+
+    UpdateNodeRequest:
+      type: object
+      description: |
+        更新节点请求体。键值对 map，仅包含需要更新的字段。
+        例如 `{"status":"standby","name":"新名称"}`。
+      additionalProperties: true
+
+    Relationship:
+      type: object
+      description: 节点间关系
+      properties:
+        relId:
+          type: string
+          description: 关系唯一标识
+          example: rel-1
+        fromNodeId:
+          type: string
+          description: 起始节点 ID
+          example: sat-1
+        toNodeId:
+          type: string
+          description: 目标节点 ID
+          example: comm-1
+        relType:
+          $ref: '#/components/schemas/RelationshipType'
+        properties:
+          type: object
+          description: 关系特有属性的扩展字段
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+          example: "2026-07-01T00:00:00Z"
+      required: [relId, fromNodeId, toNodeId, relType, createdAt]
+
+    RelationshipType:
+      type: string
+      description: 关系类型枚举
+      enum:
+        - belongsTo
+        - controlledBy
+        - owns
+        - providesServiceTo
+        - executedBy
+        - usesResource
+        - memberOf
+        - contains
+        - targets
+      example: belongsTo
+
+    CreateRelationshipRequest:
+      type: object
+      description: 创建关系请求体
+      properties:
+        toNodeId:
+          type: string
+          description: 目标节点 ID
+          example: comm-1
+        relType:
+          $ref: '#/components/schemas/RelationshipType'
+        properties:
+          type: object
+          additionalProperties: true
+      required: [toNodeId, relType]
+
+    Event:
+      type: object
+      description: 事件总线通用事件
+      properties:
+        eventId:
+          type: string
+          description: 事件唯一标识
+          example: evt-1
+        eventType:
+          type: string
+          description: 事件类型
+          example: TelemetryReceived
+          enum:
+            - TelemetryReceived
+            - StateUpdated
+            - NodeRegistered
+            - NodeUpdated
+            - NodeDeleted
+            - RelationshipCreated
+            - RelationshipDeleted
+            - TaskStatusChanged
+            - TaskScheduled
+            - HealthAlarm
+            - CommandSent
+            - CommandAcked
+            - ConjunctionAlert
+            - ResourceMatchCompleted
+        timestamp:
+          type: string
+          format: date-time
+          description: 事件产生时间
+          example: "2026-07-01T00:00:00Z"
+        sourceNodeId:
+          type: string
+          description: 事件来源节点 ID
+          example: sat-1
+        traceId:
+          type: string
+          description: 链路追踪 ID
+          example: trace-1
+        payload:
+          type: object
+          description: 事件载荷（结构因 eventType 而异）
+          additionalProperties: true
+      required: [eventId, eventType, timestamp, sourceNodeId, payload]
+
+    Schema:
+      type: object
+      description: 事件 Schema 定义
+      properties:
+        eventType:
+          type: string
+          description: 事件类型
+          example: TelemetryReceived
+        version:
+          type: string
+          description: 语义化版本号
+          example: "1.0.0"
+        fields:
+          type: array
+          description: Payload 字段定义列表
+          items:
+            $ref: '#/components/schemas/FieldDef'
+      required: [eventType, version, fields]
+
+    FieldDef:
+      type: object
+      description: 事件 Payload 字段定义
+      properties:
+        name:
+          type: string
+          description: 字段名（对应 JSON tag）
+          example: satelliteId
+        type:
+          type: string
+          description: 字段类型（string/number/boolean/timestamp/object/array）
+          example: string
+        required:
+          type: boolean
+          description: 是否必填
+          example: true
+      required: [name, type, required]
+
+    ErrorResponse:
+      type: object
+      description: 统一错误响应
+      properties:
+        error:
+          type: string
+          description: 错误码（HTTP 状态文本）
+          example: not_found
+        message:
+          type: string
+          description: 错误详情
+          example: "节点不存在: nodeId=sat-1"
+      required: [error, message]
+
+    LoginRequest:
+      type: object
+      description: 登录请求体
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          format: password
+          example: admin123
+      required: [username, password]
+
+    LoginResponse:
+      type: object
+      description: 登录成功响应
+      properties:
+        token:
+          type: string
+          description: JWT token
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        expiresIn:
+          type: integer
+          description: 有效期（秒）
+          example: 86400
+      required: [token, expiresIn]
+
+    User:
+      type: object
+      description: 用户信息
+      properties:
+        userId:
+          type: string
+          description: 用户 ID
+        username:
+          type: string
+          description: 用户名
+          example: admin
+        roles:
+          type: array
+          description: 角色列表
+          items:
+            type: string
+          example: [admin]
+        communityId:
+          type: string
+          description: 所属社区 ID
+        createdAt:
+          type: string
+          format: date-time
+          description: 创建时间
+        updatedAt:
+          type: string
+          format: date-time
+          description: 更新时间
+
+    CreateUserRequest:
+      type: object
+      description: 创建用户请求体
+      properties:
+        username:
+          type: string
+          example: operator1
+        password:
+          type: string
+          format: password
+          example: secret
+        roles:
+          type: array
+          items:
+            type: string
+          example: [operator]
+        communityId:
+          type: string
+          example: comm-1
+      required: [username, password, roles]
+
+    ReplayRequest:
+      type: object
+      description: 事件回放请求体
+      properties:
+        eventTypes:
+          type: array
+          description: 事件类型过滤
+          items:
+            type: string
+          example: [NodeRegistered]
+        sourceNodeId:
+          type: string
+          description: 来源节点 ID 过滤
+          example: sat-1
+        startTime:
+          type: string
+          format: date-time
+          description: 起始时间（RFC3339）
+          example: "2026-07-01T00:00:00Z"
+        endTime:
+          type: string
+          format: date-time
+          description: 结束时间（RFC3339）
+          example: "2026-07-02T00:00:00Z"
+        limit:
+          type: integer
+          description: 返回条数上限
+          example: 100
+
+    SendCommandRequest:
+      type: object
+      description: 发送指令请求体
+      properties:
+        satelliteId:
+          type: string
+          description: 目标卫星 ID
+          example: sat-1
+        commandType:
+          type: string
+          description: 指令类型
+          example: attitude
+        priority:
+          type: integer
+          description: 优先级（数字越大优先级越高）
+          example: 5
+        parameters:
+          type: object
+          description: 指令参数
+          additionalProperties: true
+      required: [satelliteId, commandType]
+
+    SendCommandResponse:
+      type: object
+      description: 发送指令响应
+      properties:
+        commandId:
+          type: string
+          description: 指令 ID
+          example: 00000000-0000-0000-0000-000000000001
+        status:
+          type: string
+          description: 状态
+          example: queued
+      required: [commandId, status]
+
+    CommandStatus:
+      type: object
+      description: 指令状态
+      properties:
+        commandId:
+          type: string
+        satelliteId:
+          type: string
+        commandType:
+          type: string
+        status:
+          type: string
+          enum: [queued, sent, acked, failed, timeout, cancelled]
+        sentAt:
+          type: string
+          format: date-time
+        ackedAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+
+    CancelCommandResponse:
+      type: object
+      description: 取消指令响应
+      properties:
+        commandId:
+          type: string
+        status:
+          type: string
+          example: cancelled
+      required: [commandId, status]
+
+    ListAdaptersResponse:
+      type: object
+      description: 适配器列表响应
+      properties:
+        adapters:
+          type: array
+          items:
+            type: string
+          example: [mock, real]
+        active:
+          type: string
+          example: mock
+
+    ListParsersResponse:
+      type: object
+      description: 解析器列表响应
+      properties:
+        parsers:
+          type: array
+          items:
+            type: string
+          example: [json, tle]
+        active:
+          type: string
+          example: json
+        available:
+          type: boolean
+          description: 插件管理是否可用
+
+    SetNameRequest:
+      type: object
+      description: 设置名称请求体（用于解析器/适配器切换）
+      properties:
+        name:
+          type: string
+          example: json
+      required: [name]
+
+    SetNameResponse:
+      type: object
+      description: 设置名称响应
+      properties:
+        active:
+          type: string
+          example: json
+      required: [active]
+
+    SendTelemetryRequest:
+      type: object
+      description: 手动发送遥测请求体
+      properties:
+        data:
+          type: string
+          description: 原始遥测数据字符串
+          example: '{"satelliteId":"sat-1","timestamp":"2026-07-01T00:00:00Z","parameters":{"temp":45.2},"quality":"good"}'
+      required: [data]
+
+    SendTelemetryResponse:
+      type: object
+      description: 手动发送遥测响应
+      properties:
+        status:
+          type: string
+          example: accepted
+        parser:
+          type: string
+          example: json
+        metrics:
+          type: object
+          description: 遥测流水线当前指标快照
+          additionalProperties: true
+
+    PluginInstance:
+      type: object
+      description: 插件实例
+      properties:
+        name:
+          type: string
+          description: 插件名称
+        version:
+          type: string
+          description: 插件版本
+        type:
+          type: string
+          description: 插件类型
+        status:
+          type: string
+          description: 插件状态
+
+    HealthResponse:
+      type: object
+      description: 健康检查响应
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: dev
+        uptime:
+          type: string
+          description: 运行时间（可读格式）
+          example: 1h2m3s
+        uptimeMs:
+          type: integer
+          description: 运行时间（毫秒）
+          example: 3723000
+        deps:
+          type: object
+          description: 后端依赖连通性（database / bus，未注入依赖时为缺失）
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [up, down]
+                example: up
+              error:
+                type: string
+      required: [status, version, uptime, uptimeMs]
+
+    # ===== 机器接入方（T2）相关 Schema =====
+    CreateClientRequest:
+      type: object
+      description: 创建机器接入方请求体
+      properties:
+        name:
+          type: string
+          example: demo-satellite-watcher
+        moduleName:
+          type: string
+          example: watcher
+        communityId:
+          type: string
+          example: community-001
+        roles:
+          type: array
+          items:
+            type: string
+          example: [operator]
+      required: [name]
+
+    Client:
+      type: object
+      description: 机器接入方（Client）信息
+      properties:
+        clientId:
+          type: string
+          description: 客户端 ID
+        name:
+          type: string
+          description: 客户端名称
+        moduleName:
+          type: string
+          description: 所属模块名
+        communityId:
+          type: string
+          description: 所属社区/租户 ID
+        roles:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum: [active, revoked]
+          description: 状态（active 仅创建后即刻或短暂有效，吊销后为 revoked）
+        apiKey:
+          type: string
+          description: 明文 API Key（格式 aos_...，仅创建响应返回，此后不可再获取）
+          example: aos_xxxxxxxxxxxxxxxx
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TokenExchangeRequest:
+      type: object
+      description: API Key 换取 JWT 请求体。api_key 与 Authorization 头二选一。
+      properties:
+        apiKey:
+          type: string
+          description: 机器接入方 API Key（aos_ 前缀）
+          example: aos_xxxxxxxxxxxxxxxx
+      required: [apiKey]
+
+    # ===== 遥测上报（T5）相关 Schema =====
+    TelemetryFrame:
+      type: object
+      description: 单帧遥测数据
+      properties:
+        satelliteId:
+          type: string
+          description: 卫星 ID
+          example: sat-1
+        timestamp:
+          type: string
+          format: date-time
+          description: 遥测时间戳（RFC3339，缺失时使用服务端当前时间）
+        parameters:
+          type: object
+          description: 遥测参数键值对
+          additionalProperties: true
+          example: {"voltage": 3.3}
+        quality:
+          type: string
+          description: 数据质量标识
+          example: good
+      required: [satelliteId]
+
+    IngestTelemetryRequest:
+      type: object
+      description: 遥测批量上报请求体（支持单帧与批量数组）
+      properties:
+        frames:
+          type: array
+          description: 遥测帧列表
+          items:
+            $ref: '#/components/schemas/TelemetryFrame'
+      required: [frames]
+
+    IngestTelemetryResponse:
+      type: object
+      description: 遥测批量上报响应
+      properties:
+        status:
+          type: string
+          example: accepted
+        accepted:
+          type: integer
+          description: 成功发布的帧数（非法帧不计入）
+          example: 3
+        total:
+          type: integer
+          description: 收到总帧数
+          example: 4
+      required: [status, accepted, total]
+
+    # ===== 用量统计（T3/计费预留）相关 Schema =====
+    UsageAggregate:
+      type: object
+      description: 用量聚合项
+      properties:
+        tenantId:
+          type: string
+        clientId:
+          type: string
+        endpoint:
+          type: string
+        operation:
+          type: string
+        unit:
+          type: string
+          description: 计量单位（frame / byte / call / event / node / seconds）
+          example: frame
+        count:
+          type: integer
+          description: 该桶内累计计数
+          example: 128
+        windowStart:
+          type: string
+          format: date-time
+        windowEnd:
+          type: string
+          format: date-time

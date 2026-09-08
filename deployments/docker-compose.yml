@@ -1,0 +1,97 @@
+# Openspace OS Core docker-compose 编排 —— 生产模式
+# 依赖 PostgreSQL（存储）与 NATS（事件总线，JetStream）。
+# 通过环境变量覆盖默认配置，走 storage.type=postgres / bus.type=nats。
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: aos-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: aos
+      POSTGRES_PASSWORD: aos_secret
+      POSTGRES_DB: openspace
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aos -d openspace"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: aos-nats
+    restart: unless-stopped
+    # -js 启用 JetStream 能力
+    command: ["-js", "-m", "8222"]
+    volumes:
+      - natsdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  openspace-os-core:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    image: openspace-os-core:latest
+    container_name: openspace-os-core
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+      - "7000:7000"
+    volumes:
+      - ../plugins:/app/plugins
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - TZ=Asia/Shanghai
+      - OPENSPACE_LOG_LEVEL=info
+      # 数据存储切换到 PostgreSQL
+      - OPENSPACE_DATA_TYPE=postgres
+      - OPENSPACE_DATA_POSTGRES_DSN=postgres://aos:aos_secret@postgres:5432/openspace?sslmode=disable
+      # 事件总线切换到 NATS JetStream
+      - OPENSPACE_BUS_TYPE=nats
+      - OPENSPACE_BUS_URL=nats://nats:4222
+      - OPENSPACE_BUS_STREAM_NAME=events
+      # 事件保留 7 天（默认已为 168h）
+      - OPENSPACE_BUS_MAX_STREAM_AGE=168h
+      # 启用机器接入方鉴权（生产建议通过密钥注入覆盖）
+      - OPENSPACE_AUTH_ENABLED=true
+      - OPENSPACE_AUTH_SECRET_KEY=change-me-in-production
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  pgdata:
+  natsdata:

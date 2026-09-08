@@ -1,0 +1,26 @@
+bin/
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.idea/
+.vscode/
+*.exe
+
+# IDE session/spec data
+.trae/
+
+# graphify generated output
+graphify-out/
+.graphify_*.json
+.graphify_*.txt
+.graphify_*.py
+
+# Python
+__pycache__/
+*.pyc
+
+# Large binary documents (PDF/DOCX) — 不适合放入 git
+*.pdf
+*.docx

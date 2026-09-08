@@ -1,0 +1,28 @@
+# Openspace OS Core 配置文件
+# 所有配置项均可通过环境变量覆盖，环境变量前缀为 OPENSPACE_，层级用下划线分隔
+# 例如：OPENSPACE_SERVER_HTTP_PORT=9090
+
+server:
+  http_port: 8080
+  grpc_port: 9090
+  telemetry_port: 7000
+
+data:
+  sqlite_path: ./data/openspace-os.db
+
+plugin:
+  directory: ./plugins
+
+log:
+  level: info
+  format: json
+
+otel:
+  enabled: false
+  endpoint: ""
+  service_name: "openspace-os-core"
+
+auth:
+  enabled: false
+  secret_key: "openspace-os-core-dev-secret-key"
+  token_duration: 24

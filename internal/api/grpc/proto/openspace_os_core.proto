@@ -1,0 +1,188 @@
+syntax = "proto3";
+
+package openspace_os.core.v1;
+
+option go_package = "github.com/openspace-os/openspace-os-core/internal/api/grpc;openspaceosgrpc";
+
+// OpenspaceOSCoreService 是 Openspace OS Core 对外暴露的 gRPC 服务，覆盖知识图谱、事件总线与 Schema 管理。
+//
+// 本文件仅作为接口契约文档。由于 Windows 环境可能未安装 protoc 编译器，
+// Go 端的消息类型与服务接口在 messages.go 和 service.go 中手动实现，
+// 不依赖 protoc 生成的代码。生成命令（环境就绪时）：
+//   protoc --go_out=. --go-grpc_out=. internal/api/grpc/proto/openspace_os_core.proto
+service OpenspaceOSCoreService {
+  // 创建 Node
+  rpc CreateNode(CreateNodeRequest) returns (Node);
+  // 查询 Node
+  rpc GetNode(GetNodeRequest) returns (Node);
+  // 更新 Node
+  rpc UpdateNode(UpdateNodeRequest) returns (Node);
+  // 删除 Node
+  rpc DeleteNode(DeleteNodeRequest) returns (google.protobuf.Empty);
+  // 列表查询 Node
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse);
+  // 建立关系
+  rpc CreateRelationship(CreateRelationshipRequest) returns (Relationship);
+  // 删除关系
+  rpc DeleteRelationship(DeleteRelationshipRequest) returns (google.protobuf.Empty);
+  // 图遍历
+  rpc QueryGraph(QueryGraphRequest) returns (QueryGraphResponse);
+  // 事件回放
+  rpc ReplayEvents(ReplayEventsRequest) returns (ReplayEventsResponse);
+  // 列出 Schema
+  rpc ListSchemas(ListSchemasRequest) returns (ListSchemasResponse);
+  // 事件订阅（服务端流）
+  rpc SubscribeEvents(SubscribeEventsRequest) returns (stream Event);
+  // 遥测批量上报（客户端流），校验 TelemetryReceived schema 后入总线（T5.2）
+  rpc IngestTelemetry(stream TelemetryFrame) returns (IngestTelemetryResponse);
+}
+
+// Node 消息，对应 model.Node
+message Node {
+  string nodeId = 1;
+  string nodeType = 2;
+  string name = 3;
+  string status = 4;
+  string ownerCommunityId = 5;
+  string createdAt = 6;   // RFC3339
+  string updatedAt = 7;   // RFC3339
+  string shardKey = 8;
+  string federationId = 9;
+  map<string, string> properties = 10;
+}
+
+// Relationship 消息，对应 model.Relationship
+message Relationship {
+  string relId = 1;
+  string fromNodeId = 2;
+  string toNodeId = 3;
+  string relType = 4;
+  map<string, string> properties = 5;
+  string createdAt = 6;   // RFC3339
+}
+
+// Event 消息，对应 event.Event
+message Event {
+  string eventId = 1;
+  string eventType = 2;
+  string timestamp = 3;   // RFC3339
+  string sourceNodeId = 4;
+  string traceId = 5;
+  map<string, string> payload = 6;
+}
+
+// Schema 消息，对应 event.Schema
+message Schema {
+  string eventType = 1;
+  string version = 2;
+  repeated FieldDef fields = 3;
+}
+
+// FieldDef 描述 Schema 中的一个字段
+message FieldDef {
+  string name = 1;
+  string type = 2;
+  bool required = 3;
+}
+
+// 创建 Node 请求
+message CreateNodeRequest {
+  Node node = 1;
+}
+
+// 查询 Node 请求
+message GetNodeRequest {
+  string nodeId = 1;
+}
+
+// 更新 Node 请求
+message UpdateNodeRequest {
+  string nodeId = 1;
+  map<string, string> changes = 2;
+}
+
+// 删除 Node 请求
+message DeleteNodeRequest {
+  string nodeId = 1;
+}
+
+// 列表查询 Node 请求
+message ListNodesRequest {
+  string nodeType = 1;
+  string ownerCommunityId = 2;
+  string status = 3;
+  int32 limit = 4;
+  int32 offset = 5;
+}
+
+// 列表查询 Node 响应
+message ListNodesResponse {
+  repeated Node nodes = 1;
+}
+
+// 建立关系请求
+message CreateRelationshipRequest {
+  string fromNodeId = 1;
+  string toNodeId = 2;
+  string relType = 3;
+  map<string, string> properties = 4;
+}
+
+// 删除关系请求
+message DeleteRelationshipRequest {
+  string relId = 1;
+}
+
+// 图遍历请求
+message QueryGraphRequest {
+  string nodeId = 1;
+  string direction = 2;   // "out" / "in" / "both"
+  string relType = 3;
+  int32 maxDepth = 4;
+}
+
+// 图遍历响应
+message QueryGraphResponse {
+  repeated Relationship relationships = 1;
+}
+
+// 事件回放请求
+message ReplayEventsRequest {
+  repeated string eventTypes = 1;
+  string sourceNodeId = 2;
+  string startTime = 3;   // RFC3339
+  string endTime = 4;     // RFC3339
+  int32 limit = 5;
+}
+
+// 事件回放响应
+message ReplayEventsResponse {
+  repeated Event events = 1;
+}
+
+// 列出 Schema 请求
+message ListSchemasRequest {}
+
+// 列出 Schema 响应
+message ListSchemasResponse {
+  repeated Schema schemas = 1;
+}
+
+// 事件订阅请求
+message SubscribeEventsRequest {
+  repeated string eventTypes = 1;
+}
+
+// 遥测单帧，对应遥测上报（T5.2）
+message TelemetryFrame {
+  string satelliteId = 1;
+  string timestamp = 2;   // RFC3339
+  map<string, string> parameters = 3;
+  string quality = 4;
+}
+
+// 遥测批量上报响应（T5.2）
+message IngestTelemetryResponse {
+  int32 accepted = 1;
+  int32 total = 2;
+}
